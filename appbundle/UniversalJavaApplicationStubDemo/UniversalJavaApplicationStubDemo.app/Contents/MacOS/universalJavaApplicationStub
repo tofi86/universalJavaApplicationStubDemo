@@ -11,14 +11,14 @@
 #                                                                                #
 # @author    Tobias Fischer                                                      #
 # @url       https://github.com/tofi86/universalJavaApplicationStub              #
-# @date      2019-12-09                                                          #
-# @version   3.0.4                                                               #
+# @date      2020-08-30                                                          #
+# @version   3.1.0-beta                                                          #
 #                                                                                #
 ##################################################################################
 #                                                                                #
 # The MIT License (MIT)                                                          #
 #                                                                                #
-# Copyright (c) 2014-2018 Tobias Fischer                                         #
+# Copyright (c) 2014-2020 Tobias Fischer                                         #
 #                                                                                #
 # Permission is hereby granted, free of charge, to any person obtaining a copy   #
 # of this software and associated documentation files (the "Software"), to deal  #
@@ -380,6 +380,21 @@ elif [[ $LANG == zh* ]] ; then
 	MSG_VISIT_JAVA_DOT_COM="Java by Oracle"
 	MSG_VISIT_ADOPTOPENJDK="Java by AdoptOpenJDK"
 
+# Spanish localization
+elif [[ $LANG == es* ]] ; then
+	MSG_ERROR_LAUNCHING="ERROR iniciando '${CFBundleName}'."
+	MSG_MISSING_MAINCLASS="¡'MainClass' no especificada!\n¡La aplicación Java no puede iniciarse!"
+	MSG_JVMVERSION_REQ_INVALID="La sintaxis de la versión Java requerida no es válida: %s\nPor favor, contacte con el desarrollador de la aplicación."
+	MSG_NO_SUITABLE_JAVA="¡No se encontró una versión de Java adecuada en su sistema!\nEste programa requiere Java %s"
+	MSG_JAVA_VERSION_OR_LATER="o posterior"
+	MSG_JAVA_VERSION_LATEST="(ultima actualización)"
+	MSG_JAVA_VERSION_MAX="superior a %s"
+	MSG_NO_SUITABLE_JAVA_CHECK="Asegúrese de instalar la versión Java requerida."
+	MSG_INSTALL_JAVA="¡Necesita tener JAVA instalado en su Mac!\nVisite java.com para consultar las instrucciones para su instalación..."
+	MSG_LATER="Más tarde"
+	MSG_VISIT_JAVA_DOT_COM="Java de Oracle"
+	MSG_VISIT_ADOPTOPENJDK="Java de AdoptOpenJDK"
+
 # English default localization
 else
 	MSG_ERROR_LAUNCHING="ERROR launching '${CFBundleName}'."
@@ -477,7 +492,7 @@ function get_comparable_java_version() {
 ################################################################################
 function is_valid_requirement_pattern() {
 	local java_req=$1
-	java8pattern='1\.[4-8](\.0)?(\.0_[0-9]+)?[*+]?'
+	java8pattern='1\.[4-8](\.[0-9]+)?(\.0_[0-9]+)?[*+]?'
 	java9pattern='(9|1[0-9])(-ea|[*+]|(\.[0-9]+){1,2}[*+]?)?'
 	# test matches either old Java versioning scheme (up to 1.8) or new scheme (starting with 9)
 	if [[ ${java_req} =~ ^(${java8pattern}|${java9pattern})$ ]]; then
@@ -523,7 +538,7 @@ fi
 # check for any other or a specific Java version
 # also if $JAVA_HOME exists but isn't executable
 if [ -z "${JAVACMD}" ] || [ ! -x "${JAVACMD}" ] ; then
-	stub_logger "[JavaSearch] Checking for JavaVirtualMachines on the system ..."
+	stub_logger "[JavaSearch] Searching for JavaVirtualMachines on the system ..."
 	# reset variables
 	JAVACMD=""
 	JAVACMD_version=""
@@ -552,14 +567,22 @@ if [ -z "${JAVACMD}" ] || [ ! -x "${JAVACMD}" ] ; then
 
 	# find installed JavaVirtualMachines (JDK + JRE)
 	allJVMs=()
-	# read JDK's from '/usr/libexec/java_home -V' command
-	while read -r line; do
-		version=$(echo $line | awk -F $',' '{print $1;}')
-		path=$(echo $line | awk -F $'" ' '{print $2;}')
+	
+	# read JDK's from '/usr/libexec/java_home --xml' command with PlistBuddy and a custom Dict iterator
+	# idea: https://stackoverflow.com/a/14085460/1128689 and https://scriptingosx.com/2018/07/parsing-dscl-output-in-scripts/
+	javaXml=$(/usr/libexec/java_home --xml)
+	javaCounter=$(/usr/libexec/PlistBuddy -c "Print" /dev/stdin <<< $javaXml | grep "Dict" | wc -l | tr -d ' ')
+	stub_logger "[JavaSearch] ... found $javaCounter JVM's"
+
+	# iterate over all Dict entries
+	for idx in $(seq 0 $((javaCounter - 1)))
+	do
+		version=$(/usr/libexec/PlistBuddy -c "print :$idx:JVMVersion" /dev/stdin <<< $javaXml)
+		path=$(/usr/libexec/PlistBuddy -c "print :$idx:JVMHomePath" /dev/stdin <<< $javaXml)
 		path+="/bin/java"
 		allJVMs+=("$version:$path")
-	done < <(/usr/libexec/java_home -V 2>&1 | grep '^[[:space:]]')
-	# unset while loop variables
+	done
+	# unset for loop variables
 	unset version path
 
 	# add Apple JRE if available
@@ -580,6 +603,9 @@ if [ -z "${JAVACMD}" ] || [ ! -x "${JAVACMD}" ] ; then
 
 
 	# determine JVMs matching the min/max version requirement
+
+	stub_logger "[JavaSearch] Filtering the result list for JVMs matching the min/max version requirement ..."
+
 	minC=$(get_comparable_java_version ${JVMVersion})
 	maxC=$(get_comparable_java_version ${JVMMaxVersion})
 	matchingJVMs=()
@@ -664,7 +690,7 @@ if [ -z "${JAVACMD}" ] || [ ! -x "${JAVACMD}" ] ; then
 	# debug output
 	for i in "${matchingJVMs[@]}"
 	do
-		stub_logger "[JavaSearch] ... ... matches all requirements: $i"
+		stub_logger "[JavaSearch] ... matches all requirements: $i"
 	done
 
 
